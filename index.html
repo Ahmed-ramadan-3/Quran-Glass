@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A premium modern Quran platform — Arabic-first, fast, and beautifully animated." />
+    <meta name="theme-color" content="#06110d" />
+    <link rel="icon" type="image/png" href="logo.png.webp">
+    <title>Quran Glass • منصة القرآن</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cairo:wght@400;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer" />
+
+    <!-- GSAP (optional) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  </head>
+  <body>
+    <!-- Loading Screen -->
+    <div id="app-loading" class="loading">
+      <div class="loading__orb" aria-hidden="true"><img class="loading__logo" src="/src/assets/logo.webp" alt="" /></div>
+      <div class="loading__stack">
+        <div class="loading__title">Quran Glass</div>
+        <div class="loading__subtitle">منصة القرآن • تجربة هادئة وعصرية</div>
+        <div class="loading__bar" aria-hidden="true"><span></span></div>
+      </div>
+    </div>
+
+    <!-- Ambient -->
+    <canvas id="bg-particles" class="bg-particles" aria-hidden="true"></canvas>
+    <div class="bg-photo" id="bgPhoto" aria-hidden="true"></div>
+    <div class="bg-overlay" aria-hidden="true"></div>
+    <div class="bg-glow" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
+    <div id="app" class="app" data-lang="ar">
+      <header class="topbar" role="banner">
+        <div class="topbar__left">
+          <button class="icon-btn" id="btnMenu" aria-label="Open navigation"><i class="fa-solid fa-bars"></i></button>
+          <div class="brand" aria-label="Quran Glass">
+            <div class="brand__mark" aria-hidden="true"><img class="brand__logo" src="/src/assets/logo.webp" alt="" /></div>
+            <div class="brand__text">
+              <div class="brand__name">Quran Glass</div>
+              <div class="brand__tag">منصة قرآن مستقبلية</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="topbar__center">
+          <div class="searchbar" role="search">
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            <input id="globalSearch" type="search" placeholder="ابحث عن سورة، آية، كلمة..." autocomplete="off" />
+            <button class="chip" id="btnSearchMode" type="button" aria-label="Search mode">الكُل</button>
+          </div>
+        </div>
+
+        <div class="topbar__right">
+          <div class="clock" id="liveClock" aria-label="Clock"><span class="clock__time">--:--</span><span class="clock__date">----</span></div>
+          <button class="icon-btn" id="btnTheme" aria-label="Toggle theme"><i class="fa-solid fa-moon"></i></button>
+          <button class="icon-btn" id="btnLang" aria-label="Toggle language"><span class="icon-btn__text">AR</span></button>
+          <button class="pill" id="btnContinue" type="button"><i class="fa-solid fa-book-open"></i><span>تابع القراءة</span></button>
+        </div>
+      </header>
+
+      <aside class="sidebar" id="sidebar" aria-label="Navigation">
+        <div class="sidebar__inner glass">
+          <div class="sidebar__title">التنقّل</div>
+          <nav class="nav">
+            <a class="nav__item is-active" href="#/home" data-route="home"><i class="fa-solid fa-house"></i><span>الرئيسية</span></a>
+            <a class="nav__item" href="#/reader" data-route="reader"><i class="fa-solid fa-book-quran"></i><span>القراءة</span></a>
+            <a class="nav__item" href="#/search" data-route="search"><i class="fa-solid fa-magnifying-glass"></i><span>البحث</span></a>
+            <a class="nav__item" href="#/bookmarks" data-route="bookmarks"><i class="fa-solid fa-bookmark"></i><span>المحفوظات</span></a>
+            <a class="nav__item" href="#/progress" data-route="progress"><i class="fa-solid fa-chart-line"></i><span>التقدّم</span></a>
+            <a class="nav__item" href="#/tasbih" data-route="tasbih"><i class="fa-solid fa-circle-plus"></i><span>تسبيح</span></a>
+            <a class="nav__item" href="#/listen" data-route="listen"><i class="fa-solid fa-headphones"></i><span>استماع</span></a>
+            <a class="nav__item" href="#/daily" data-route="daily"><i class="fa-solid fa-sparkles"></i><span>يوميّات</span></a>
+            <a class="nav__item" href="#/settings" data-route="settings"><i class="fa-solid fa-gear"></i><span>الإعدادات</span></a>
+          </nav>
+          <div class="sidebar__footer">
+            <div class="mini"><div class="mini__label">حالة الاتصال</div><div class="mini__value" id="apiStatus">—</div></div>
+            <button class="ghost" id="btnCloseSidebar" type="button">إغلاق</button>
+          </div>
+        </div>
+      </aside>
+
+      <nav class="bottomnav" aria-label="Bottom navigation">
+        <a href="#/home" data-route="home" class="bottomnav__item is-active"><i class="fa-solid fa-house"></i><span>الرئيسية</span></a>
+        <a href="#/reader" data-route="reader" class="bottomnav__item"><i class="fa-solid fa-book-quran"></i><span>قراءة</span></a>
+        <a href="#/search" data-route="search" class="bottomnav__item"><i class="fa-solid fa-magnifying-glass"></i><span>بحث</span></a>
+        <a href="#/tasbih" data-route="tasbih" class="bottomnav__item"><i class="fa-solid fa-circle-plus"></i><span>تسبيح</span></a>
+        <a href="#/listen" data-route="listen" class="bottomnav__item"><i class="fa-solid fa-headphones"></i><span>استماع</span></a>
+        <a href="#/settings" data-route="settings" class="bottomnav__item"><i class="fa-solid fa-gear"></i><span>إعدادات</span></a>
+      </nav>
+
+      <main class="main" id="main" role="main">
+        <section class="route" id="route-home" data-route="home">
+          <div class="hero">
+            <div class="hero__grid">
+              <div class="hero__copy glass">
+                <div class="kicker">تجربة قراءة هادئة • عصرية • فاخرة</div>
+                <h1 class="hero__title">اقرأ القرآن <span class="hero__titleGlow">بسكينة</span> وبجمال</h1>
+                <p class="hero__desc">منصة عربية أولًا، بواجهة زجاجية فخمة، بحث فوري، صوت، حفظ، وتقدّم—كل شيء في تجربة واحدة.</p>
+                <div class="hero__actions">
+                  <button class="cta" data-go="reader"><i class="fa-solid fa-book-quran"></i><span>ابدأ القراءة</span><span class="cta__shine" aria-hidden="true"></span></button>
+                  <button class="cta cta--secondary" data-go="daily"><i class="fa-solid fa-sparkles"></i><span>آية اليوم</span></button>
+                </div>
+                <div class="quote" id="animatedQuote" aria-label="Quran quote"><div class="quote__arabic">﴿ وَقُل رَّبِّ زِدْنِي عِلْمًا ﴾</div><div class="quote__meta">سورة طه • 114</div></div>
+                <div class="quick">
+                  <button class="quick__btn" data-go="search"><i class="fa-solid fa-magnifying-glass"></i><span>بحث سريع</span></button>
+                  <button class="quick__btn" data-go="bookmarks"><i class="fa-solid fa-bookmark"></i><span>المحفوظات</span></button>
+                  <button class="quick__btn" data-go="progress"><i class="fa-solid fa-chart-line"></i><span>إحصائيات</span></button>
+                </div>
+              </div>
+
+              <div class="hero__cards">
+                <article class="card glass" id="dailyAyahCard">
+                  <div class="card__top">
+                    <div><div class="card__title">آية اليوم</div><div class="card__sub" id="dailyAyahMeta">—</div></div>
+                    <button class="icon-btn" id="btnRefreshDaily" aria-label="Refresh daily"><i class="fa-solid fa-rotate"></i></button>
+                  </div>
+                  <div class="qtext qtext--amiri" id="dailyAyahText">جاري التحميل…</div>
+                  <div class="card__actions">
+                    <button class="ghost" id="btnDailyPlay"><i class="fa-solid fa-play"></i><span>تشغيل</span></button>
+                    <button class="ghost" id="btnDailySave"><i class="fa-solid fa-bookmark"></i><span>حفظ</span></button>
+                    <button class="ghost" id="btnDailyOpen"><i class="fa-solid fa-arrow-up-right-from-square"></i><span>فتح</span></button>
+                  </div>
+                </article>
+
+                <article class="card glass">
+                  <div class="card__title">تقدّمك اليوم</div>
+                  <div class="statRow">
+                    <div class="stat"><div class="stat__num" id="statStreak">0</div><div class="stat__lbl">سلسلة</div></div>
+                    <div class="stat"><div class="stat__num" id="statPercent">0%</div><div class="stat__lbl">إنجاز</div></div>
+                    <div class="stat"><div class="stat__num" id="statMinutes">0</div><div class="stat__lbl">دقيقة</div></div>
+                  </div>
+                  <div class="progressBar" aria-label="Progress"><span id="progressFill"></span></div>
+                  <div class="muted">يتم حفظ التقدّم تلقائيًا أثناء القراءة.</div>
+                </article>
+
+                <article class="card glass"><div class="card__title">تذكير لطيف</div><div class="reminder" id="randomReminder">—</div></article>
+
+              </div>
+            </div>
+          </div>
+
+          
+        </section>
+
+        <section class="route" id="route-reader" data-route="reader" hidden>
+          <div class="pageHead">
+            <div>
+              <h2 class="pageHead__title">القراءة</h2>
+              <p class="pageHead__desc">اختر سورة ثم استمتع بقراءة بطاقات آيات أنيقة مع تمييز وحفظ.</p>
+            </div>
+            <div class="pageHead__actions">
+              <button class="ghost" id="btnScrollTop"><i class="fa-solid fa-arrow-up"></i><span>أعلى</span></button>
+            </div>
+          </div>
+
+          <div class="readerLayout">
+            <aside class="surahList glass" aria-label="Surah list">
+              <div class="surahList__head">
+                <div class="surahList__title">السور</div>
+                <button class="icon-btn" id="btnReloadSurahs" aria-label="Reload surahs"><i class="fa-solid fa-rotate"></i></button>
+              </div>
+              <div id="surahList" class="surahList__items">
+                <div class="skeletonList" aria-hidden="true"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
+              </div>
+            </aside>
+
+            <section class="reader glass" aria-label="Reader">
+              <div class="reader__top sticky">
+                <div class="reader__meta">
+                  <div class="reader__title" id="readerTitle">اختر سورة</div>
+                  <div class="reader__sub" id="readerSub">سيتم تحميل الآيات من API</div>
+                </div>
+                <div class="reader__tools">
+                  <button class="icon-btn" id="btnPlaySurah" aria-label="Play surah"><i class="fa-solid fa-play"></i></button>
+                  <button class="icon-btn" id="btnBookmarkSurah" aria-label="Bookmark surah"><i class="fa-regular fa-bookmark"></i></button>
+                </div>
+              </div>
+
+              <div id="ayahList" class="ayahList">
+                <div class="empty">
+                  <div class="empty__icon"><i class="fa-solid fa-book-quran"></i></div>
+                  <div class="empty__title">لا توجد سورة مختارة</div>
+                  <div class="empty__desc">اختر سورة من القائمة لبدء القراءة.</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="route" id="route-search" data-route="search" hidden>
+          <div class="pageHead">
+            <div>
+              <h2 class="pageHead__title">البحث</h2>
+              <p class="pageHead__desc">بحث فوري بالاسم أو الكلمات أو نص الآية (حسب الـ API المتاح).</p>
+            </div>
+          </div>
+
+          <div class="glass panel">
+            <div class="searchPanel">
+              <div class="searchPanel__row">
+                <div class="field">
+                  <label>استعلام البحث</label>
+                  <input id="searchInput" type="search" placeholder="مثال: الرحمن، موسى، النور..." />
+                </div>
+                <div class="field">
+                  <label>نوع البحث</label>
+                  <select id="searchType">
+                    <option value="mixed" selected>مُختلط</option>
+                    <option value="surah">اسم السورة</option>
+                    <option value="ayah">نص الآية</option>
+                    <option value="keyword">كلمة مفتاحية</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="searchResults" class="searchResults">
+                <div class="empty">
+                  <div class="empty__icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+                  <div class="empty__title">ابدأ الكتابة</div>
+                  <div class="empty__desc">النتائج ستظهر فورًا—مع حالات تحميل وأخطاء واضحة.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="route" id="route-bookmarks" data-route="bookmarks" hidden>
+          <div class="pageHead">
+            <div>
+              <h2 class="pageHead__title">المحفوظات</h2>
+              <p class="pageHead__desc">آيات وسور مفضلة + موضع آخر قراءة (محليًا عبر LocalStorage).</p>
+            </div>
+            <div class="pageHead__actions">
+              <button class="ghost" id="btnClearBookmarks"><i class="fa-solid fa-trash"></i><span>مسح</span></button>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <section class="glass panel">
+              <h3 class="panel__title">آخر موضع قراءة</h3>
+              <div id="lastRead" class="muted">—</div>
+              <div class="panel__actions">
+                <button class="cta" id="btnGoLastRead"><i class="fa-solid fa-book-open"></i><span>متابعة</span><span class="cta__shine" aria-hidden="true"></span></button>
+              </div>
+            </section>
+
+            <section class="glass panel">
+              <h3 class="panel__title">الآيات المفضلة</h3>
+              <div id="favAyahs" class="list"></div>
+            </section>
+
+            <section class="glass panel">
+              <h3 class="panel__title">السور المفضلة</h3>
+              <div id="favSurahs" class="list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="route" id="route-progress" data-route="progress" hidden>
+          <div class="pageHead">
+            <div>
+              <h2 class="pageHead__title">التقدّم</h2>
+              <p class="pageHead__desc">إحصائيات خفيفة وسلسلة أيام وعدادات متحركة.</p>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <section class="glass panel">
+              <h3 class="panel__title">ملخص</h3>
+              <div class="statRow">
+                <div class="stat"><div class="stat__num" id="pStreak">0</div><div class="stat__lbl">سلسلة</div></div>
+                <div class="stat"><div class="stat__num" id="pSessions">0</div><div class="stat__lbl">جلسات</div></div>
+                <div class="stat"><div class="stat__num" id="pMinutes">0</div><div class="stat__lbl">دقائق</div></div>
+              </div>
+              <div class="muted">ملاحظة: هذا نظام تقدّم محلي قابل للتطوير لاحقًا.</div>
+            </section>
+
+            <section class="glass panel">
+              <h3 class="panel__title">نشاط آخر 7 أيام</h3>
+              <canvas id="progressChart" height="140" aria-label="Progress chart"></canvas>
+            </section>
+          </div>
+        </section>
+
+        <section class="route" id="route-tasbih" data-route="tasbih" hidden>
+          <div class="pageHead">
+            <div>
+              <h2 class="pageHead__title">تسبيح</h2>
+              <p class="pageHead__desc">عداد رقمي تفاعلي مع حفظ تلقائي واهتزاز لطيف.</p>
+            </div>
+          </div>
+
+          <div class="tasbihWrap">
+            <div class="tasbih glass">
+              <div class="tasbih__ring" aria-hidden="true"></div>
+              <div class="tasbih__modes">
+                <button class="chip" id="tasbihModeLimited" type="button">وضع 33</button>
+                <button class="chip" id="tasbihModeFree" type="button">وضع Free</button>
+                <div class="tasbih__progress" id="tasbihProgress">0 / ∞</div>
+              </div>
+              <div class="tasbih__count" id="tasbihCount">0</div>
+              <div class="tasbih__label" id="tasbihLabel">سبحان الله</div>
+              <div class="tasbih__actions">
+                <button class="cta" id="btnTasbihTap"><i class="fa-solid fa-hand-pointer"></i><span>تسبيح</span><span class="cta__shine" aria-hidden="true"></span></button>
+                <button class="cta cta--secondary" id="btnTasbihReset"><i class="fa-solid fa-rotate-left"></i><span>إعادة</span></button>
+              </div>
+              <div class="tasbih__chips">
+                <button class="chip" data-dhikr="سبحان الله">سبحان الله</button>
+                <button class="chip" data-dhikr="الحمد لله">الحمد لله</button>
+                <button class="chip" data-dhikr="الله أكبر">الله أكبر</button>
+                <button class="chip" data-dhikr="لا إله إلا الله">لا إله إلا الله</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="route" id="route-listen" data-route="listen" hidden>
+          <div class="pageHead">
+            <div>
+              <h2 class="pageHead__title">الاستماع</h2>
+              <p class="pageHead__desc">اختر سورة وقارئًا — وتابع تلوين الآية الحالية أثناء التشغيل.</p>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <section class="glass panel">
+              <h3 class="panel__title">إعدادات الاستماع</h3>
+              <div class="searchPanel__row">
+                <div class="field">
+                  <label>السورة</label>
+                  <select id="listenSurah"></select>
+                </div>
+                <div class="field">
+                  <label>القارئ</label>
+                  <select id="listenReciter">
+                    <option value="ar.alafasy" selected>المعيقلي (alafasy)</option>
+                    <option value="ar.abdulbasitmurattal">عبدالباسط (murattal)</option>
+                    <option value="ar.husary">الحصري</option>
+                    <option value="ar.shaatree">الشاطري</option>
+                  </select>
+                </div>
+              </div>
+              <div class="panel__actions" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
+                <button class="cta" id="btnListenPlay"><i class="fa-solid fa-play"></i><span>تشغيل السورة</span><span class="cta__shine" aria-hidden="true"></span></button>
+                <button class="cta cta--secondary" id="btnListenStop"><i class="fa-solid fa-stop"></i><span>إيقاف</span></button>
+              </div>
+              <div class="muted" style="margin-top:10px">سيتم تلوين الآية الحالية والتحرك تلقائيًا أثناء القراءة.</div>
+            </section>
+
+            <section class="glass panel">
+              <h3 class="panel__title">الآيات أثناء التشغيل</h3>
+              <div id="listenAyahs" class="ayahList" style="padding:0; max-height: calc(100vh - 270px); overflow:auto"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="route" id="route-daily" data-route="daily" hidden>
+          <div class="pageHead">
+            <div>
+              <h2 class="pageHead__title">يوميّات</h2>
+              <p class="pageHead__desc">آية يومية + حديث يومي + تذكيرات عشوائية في بطاقات متحركة.</p>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <section class="glass panel">
+              <h3 class="panel__title">آية اليوم</h3>
+              <div id="dailyAyahFull" class="qtext qtext--amiri">—</div>
+              <div class="panel__actions">
+                <button class="ghost" id="btnDailyPlay2"><i class="fa-solid fa-play"></i><span>تشغيل</span></button>
+                <button class="ghost" id="btnDailySave2"><i class="fa-solid fa-bookmark"></i><span>حفظ</span></button>
+              </div>
+            </section>
+
+            <section class="glass panel">
+              <h3 class="panel__title">حديث اليوم</h3>
+              <div id="dailyHadith" class="muted">جاري التحميل…</div>
+            </section>
+
+            <section class="glass panel">
+              <h3 class="panel__title">تذكير عشوائي</h3>
+              <div id="dailyReminder" class="reminder">—</div>
+              <button class="ghost" id="btnNewReminder"><i class="fa-solid fa-shuffle"></i><span>جديد</span></button>
+            </section>
+          </div>
+        </section>
+
+        <section class="route" id="route-settings" data-route="settings" hidden>
+          <div class="pageHead">
+            <div>
+              <h2 class="pageHead__title">الإعدادات</h2>
+              <p class="pageHead__desc">تحكم بالخطوط، الحجم، التباعد، الحركة، واللغة.</p>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <section class="glass panel">
+              <h3 class="panel__title">الواجهة</h3>
+              <div class="settings">
+                <div class="setRow">
+                  <div><div class="setRow__title">الوضع الليلي</div><div class="muted">تبديل سلس مع حفظ التفضيل.</div></div>
+                  <button class="pill" id="btnTheme2" type="button"><i class="fa-solid fa-circle-half-stroke"></i><span>تبديل</span></button>
+                </div>
+                <div class="setRow">
+                  <div><div class="setRow__title">الحركة والأنيميشن</div><div class="muted">إيقاف الحركة يساعد الأجهزة الضعيفة.</div></div>
+                  <label class="toggle"><input id="toggleMotion" type="checkbox" /><span class="toggle__ui" aria-hidden="true"></span></label>
+                </div>
+                <div class="setRow">
+                  <div><div class="setRow__title">تأثيرات الخلفية</div><div class="muted">جسيمات وتوهج وإضاءة تتبع المؤشر.</div></div>
+                  <label class="toggle"><input id="toggleFx" type="checkbox" /><span class="toggle__ui" aria-hidden="true"></span></label>
+                </div>
+              </div>
+            </section>
+
+            <section class="glass panel">
+              <h3 class="panel__title">الخط والقراءة</h3>
+              <div class="settings">
+                <div class="setRow">
+                  <div><div class="setRow__title">حجم خط الآيات</div><div class="muted">يتأثر في صفحة القراءة ويُحفظ محليًا.</div></div>
+                  <input id="fontSize" type="range" min="18" max="40" value="28" />
+                </div>
+                <div class="setRow">
+                  <div><div class="setRow__title">نوع الخط</div><div class="muted">Amiri للنص القرآني — مع خيارات حديثة.</div></div>
+                  <select id="fontFamily">
+                    <option value="amiri" selected>Amiri (Quran)</option>
+                    <option value="cairo">Cairo</option>
+                    <option value="tajawal">Tajawal</option>
+                  </select>
+                </div>
+                <div class="setRow">
+                  <div><div class="setRow__title">تباعد الأسطر</div><div class="muted">لراحة العين أثناء القراءة الطويلة.</div></div>
+                  <input id="lineHeight" type="range" min="1.5" max="2.6" value="2.1" step="0.1" />
+                </div>
+              </div>
+            </section>
+
+
+          </div>
+        </section>
+
+        <footer class="footer">
+          <div class="footer__inner glass">
+            <div>© <span id="year"></span> Quran Glass</div>
+            <div class="muted">تجربة قراءة واستماع هادئة <span class="made-eg">— وصُنِع بكل حب مصر 🇪🇬</span></div>
+          </div>
+        </footer>
+      </main>
+
+      <section class="player glass" id="player" aria-label="Audio player" hidden>
+        <div class="player__meta"><div class="player__title" id="playerTitle">—</div><div class="player__sub" id="playerSub">—</div></div>
+        <div class="player__controls">
+          <button class="icon-btn" id="btnPrev" aria-label="Previous"><i class="fa-solid fa-backward-step"></i></button>
+          <button class="icon-btn" id="btnPlay" aria-label="Play"><i class="fa-solid fa-play"></i></button>
+          <button class="icon-btn" id="btnNext" aria-label="Next"><i class="fa-solid fa-forward-step"></i></button>
+        </div>
+        <div class="player__bar"><span class="player__time" id="tNow">0:00</span><input id="seek" type="range" min="0" max="100" value="0" /><span class="player__time" id="tDur">0:00</span></div>
+        <div class="player__right">
+          <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          <input id="vol" type="range" min="0" max="1" value="0.9" step="0.01" aria-label="Volume" />
+          <button class="icon-btn" id="btnClosePlayer" aria-label="Close player"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <audio id="audio" preload="none"></audio>
+      </section>
+
+      <button class="fab" id="fabTop" aria-label="Scroll to top"><i class="fa-solid fa-arrow-up"></i></button>
+
+      <div class="modal" id="modal" aria-hidden="true">
+        <div class="modal__backdrop" data-close="true"></div>
+        <div class="modal__panel glass" role="dialog" aria-modal="true" aria-label="Verse of the day">
+          <div class="modal__head">
+            <div><div class="modal__title">آية اليوم</div><div class="muted" id="modalMeta">—</div></div>
+            <button class="icon-btn" data-close="true" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="qtext qtext--amiri" id="modalText">—</div>
+          <div class="modal__actions">
+            <button class="ghost" id="btnModalPlay"><i class="fa-solid fa-play"></i><span>تشغيل</span></button>
+            <button class="ghost" id="btnModalSave"><i class="fa-solid fa-bookmark"></i><span>حفظ</span></button>
+            <button class="cta" data-close="true"><span>حسنًا</span><span class="cta__shine" aria-hidden="true"></span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toast" id="toast" aria-live="polite" aria-atomic="true"></div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
