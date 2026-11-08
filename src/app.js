@@ -1,4 +1,7 @@
 // Quran Glass — Vanilla App Logic (HTML/CSS/JS)
+import { initSecurityHardening } from "./security.js";
+import { buildMp3QuranSurahUrl, filterReciters, findPreferredMoshaf, loadMp3QuranData } from "./mp3quran-service.js";
+import { bindReminderSettings, initReminderSystem, renderReminderDashboard } from "./reminder-system.js";
 // ------------------------------------------------
 // API placeholder (swap easily):
 export const QURAN_API = "https://api.alquran.cloud/v1";
@@ -20,6 +23,8 @@ const LS = {
   tasbih: "qg_tasbih",
   daily: "qg_daily",
   seenDailyPopup: "qg_seen_daily_popup",
+  mp3Favorites: "qg_mp3quran_favorites",
+  mp3Recent: "qg_mp3quran_recent",
 };
 
 const DEFAULT_SETTINGS = {
@@ -30,6 +35,8 @@ const DEFAULT_SETTINGS = {
   ayahFont: "amiri", // amiri | cairo | tajawal
   translation: "en.asad", // default translation edition (alquran.cloud style)
   reciter: "ar.alafasy", // default reciter edition
+  mp3ReciterId: null,
+  mp3MoshafId: null,
 };
 
 const state = {
@@ -45,6 +52,7 @@ const state = {
   daily: null,
   settings: { ...DEFAULT_SETTINGS },
   isOnline: true,
+  mp3quran: { reciters: [], riwayat: [], moshaf: [], loaded: false, loading: false, error: "", selectedReciter: null, selectedMoshaf: null, ayahTimingEstimate: null, lastEstimatedAyah: null },
 };
 
 function nowISODate() {
@@ -195,6 +203,13 @@ function setRoute(route) {
     renderListenAyahs();
   }
   if (route === "daily") renderDaily();
+  if (route === "reciters") {
+    ensureMp3QuranData();
+    renderRecitersModule();
+  }
+  if (route === "settings") {
+    renderReminderDashboard($("#reminderDashboard"));
+  }
 }
 
 function startClock() {
@@ -226,6 +241,10 @@ const BG_URLS = [
   new URL("./assets/backgrounds/image_w4288_h2848_30k+_Desert_Night_Sk.webp", import.meta.url).href,
   new URL("./assets/backgrounds/image_w3000_h2143_Silhouette_of_birds_.webp", import.meta.url).href,
   new URL("./assets/backgrounds/image_w3000_h1993_500+_Forest_Mist_Pic.webp", import.meta.url).href,
+  new URL("./assets/backgrounds/1.png", import.meta.url).href,
+  new URL("./assets/backgrounds/2.png", import.meta.url).href,
+  new URL("./assets/backgrounds/3.png", import.meta.url).href,
+  new URL("./assets/backgrounds/4.png", import.meta.url).href,
 ];
 
 function initBackgroundRotator() {
@@ -336,10 +355,17 @@ function bindUI() {
       toast(state.lang === 'ar' ? 'قريبًا' : 'Coming soon');
     });
   });
-  // Sidebar
+  // Sidebar (nav menu). Keep the underlying page fixed while the menu is open,
+  // and only let the menu panel itself scroll (touch/wheel/trackpad/keyboard).
   const sidebar = $("#sidebar");
-  const closeSidebar = () => sidebar?.classList.remove("is-open");
-  const openSidebar = () => sidebar?.classList.add("is-open");
+  const closeSidebar = () => {
+    sidebar?.classList.remove("is-open");
+    document.documentElement.classList.remove("nav-open");
+  };
+  const openSidebar = () => {
+    sidebar?.classList.add("is-open");
+    document.documentElement.classList.add("nav-open");
+  };
 
   $("#btnMenu")?.addEventListener("click", openSidebar);
   $("#btnCloseSidebar")?.addEventListener("click", closeSidebar);
@@ -349,8 +375,13 @@ function bindUI() {
     if (e.target === sidebar) closeSidebar();
   });
 
-  // close when clicking any nav item
+  // close when clicking any nav item (navigation continues normally via the link's href)
   $$(".nav__item", sidebar || document).forEach((a) => a.addEventListener("click", closeSidebar));
+
+  // close on Escape for keyboard users
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && sidebar?.classList.contains("is-open")) closeSidebar();
+  });
 
   // Route links
   $$('[data-go]').forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
@@ -387,15 +418,51 @@ function bindUI() {
     persistSettings();
   });
 
-  // Scroll to top
+  // Scroll to top + smart (Facebook-style) navbar hide/show — reuses this single
+  // existing scroll listener; no second scroll listener is added.
   const fab = $("#fabTop");
+  const topbarEl = $(".topbar");
+  const navPeek = $("#navPeek");
+  let lastScrollY = window.scrollY;
+  let navHidden = false;
+  let scrollTicking = false;
+  const NAV_SCROLL_THRESHOLD = 10; // ignore tiny movements/jitter (mobile momentum, etc.)
+  const NAV_MIN_Y_TO_HIDE = 80; // never hide the navbar right at the top of a page
+
+  const applyScrollEffects = () => {
+    const y = window.scrollY;
+    const delta = y - lastScrollY;
+
+    if (Math.abs(delta) > NAV_SCROLL_THRESHOLD) {
+      // don't fight the nav-menu sidebar's own open/close animation
+      if (!document.documentElement.classList.contains("nav-open") && topbarEl) {
+        if (delta > 0 && y > NAV_MIN_Y_TO_HIDE) navHidden = true;
+        else if (delta < 0) navHidden = false;
+        topbarEl.classList.toggle("topbar--hidden", navHidden);
+        navPeek?.classList.toggle("is-on", navHidden);
+      }
+      lastScrollY = y;
+    }
+
+    if (fab) fab.classList.toggle("is-on", y > 600);
+    scrollTicking = false;
+  };
+
   const onScroll = () => {
-    if (!fab) return;
-    fab.classList.toggle("is-on", window.scrollY > 600);
+    if (scrollTicking) return;
+    scrollTicking = true;
+    requestAnimationFrame(applyScrollEffects);
   };
   window.addEventListener("scroll", onScroll, { passive: true });
   onScroll();
   fab?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+
+  navPeek?.addEventListener("click", () => {
+    navHidden = false;
+    topbarEl?.classList.remove("topbar--hidden");
+    navPeek.classList.remove("is-on");
+    lastScrollY = window.scrollY;
+  });
   $("#btnScrollTop")?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 
   // Global search (top bar) -> real search page
@@ -658,32 +725,113 @@ function escapeHTML(s) {
     .replaceAll("'", "&#039;");
 }
 
+const BASMALA_TEXT = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ";
+const EASTERN_ARABIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+function toEasternArabicNumeral(n) {
+  return String(n)
+    .split("")
+    .map((d) => EASTERN_ARABIC_DIGITS[Number(d)] ?? d)
+    .join("");
+}
+
+// Mushaf-style inline ayah (continuous flowing text + a decorative end-of-ayah marker),
+// used only by the Reading page. Keeps the same #ayah-N id / data-ayah / .ayah class as
+// the card-based renderer so bookmarking, highlighting, autoscroll, and audio-sync keep working.
+function mushafAyahSpan(a, highlightAyah) {
+  const n = a.numberInSurah;
+  const isHi = highlightAyah && Number(highlightAyah) === n;
+  return `<span class="ayah mushafAyah${isHi ? " is-highlight" : ""}" id="ayah-${n}" data-ayah="${n}">${escapeHTML(a.text || "")}<span class="ayahEnd" aria-hidden="true">${toEasternArabicNumeral(n)}</span></span> `;
+}
+
+function renderMushafPage({ highlightAyah = null } = {}) {
+  const surah = state.currentSurah;
+  const juz = state.ayahs[0]?.juz;
+  // Basmala is ayah 1 of Al-Fatihah itself, and is traditionally omitted before At-Tawbah (9).
+  const showBasmala = surah?.number !== 1 && surah?.number !== 9;
+  const title = String(surah?.name || "").replace(/^سورة\s*/, "");
+  const flow = state.ayahs.map((a) => mushafAyahSpan(a, highlightAyah)).join("");
+
+  return `
+    <div class="mushafPage">
+      <div class="mushafTopInfo">
+        <span>${escapeHTML(surah?.name || "")}</span>
+        ${juz ? `<span>${state.lang === "ar" ? "الجزء" : "Juz"} ${state.lang === "ar" ? toEasternArabicNumeral(juz) : juz}</span>` : ""}
+      </div>
+      <div class="mushafFrame">
+        <div class="mushafHeader">
+          <span class="mushafHeader__ornament" aria-hidden="true"></span>
+          <span class="mushafHeader__title">سورة ${escapeHTML(title)}</span>
+          <span class="mushafHeader__ornament" aria-hidden="true"></span>
+        </div>
+        ${showBasmala ? `<div class="mushafBasmala">${BASMALA_TEXT}</div>` : ""}
+        <div class="mushafFlow" dir="rtl">${flow || ""}</div>
+      </div>
+    </div>
+    <div class="ayahDetail" id="ayahDetail" hidden>
+      <div class="ayahDetail__head">
+        <span class="ayahDetail__num" id="ayahDetailNum"></span>
+        <div class="ayahDetail__actions">
+          <button class="icon-btn" id="ayahDetailPlay" aria-label="Play ayah"><i class="fa-solid fa-play"></i></button>
+          <button class="icon-btn" id="ayahDetailSave" aria-label="Save ayah"><i class="fa-regular fa-bookmark"></i></button>
+          <button class="icon-btn" id="ayahDetailClose" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="ayahDetail__tr" id="ayahDetailTr"></div>
+    </div>
+  `;
+}
+
+function openAyahDetail(n) {
+  if (!state.currentSurah) return;
+  const a = state.ayahs.find((x) => x.numberInSurah === n);
+  if (!a) return;
+
+  saveLastRead(state.currentSurah.number, n);
+
+  const wrap = $("#ayahList");
+  $$(".mushafAyah.is-highlight", wrap).forEach((el) => el.classList.remove("is-highlight"));
+  $(`#ayahList #ayah-${n}`)?.classList.add("is-highlight");
+
+  const panel = $("#ayahDetail");
+  if (!panel) return;
+  panel.dataset.ayah = String(n);
+  $("#ayahDetailNum").textContent = `${state.currentSurah?.name || ""} • ${n}`;
+  $("#ayahDetailTr").textContent = a.tr || (state.lang === "ar" ? "لا توجد ترجمة متاحة" : "No translation available");
+  panel.hidden = false;
+}
+
+function bindAyahDetailPanel() {
+  $("#ayahDetailPlay")?.addEventListener("click", () => {
+    const n = Number($("#ayahDetail")?.dataset.ayah || 0);
+    if (n && state.currentSurah) playAyah(state.currentSurah.number, n);
+  });
+  $("#ayahDetailSave")?.addEventListener("click", () => {
+    const n = Number($("#ayahDetail")?.dataset.ayah || 0);
+    if (n && state.currentSurah) toggleFavAyah(state.currentSurah.number, n);
+  });
+  $("#ayahDetailClose")?.addEventListener("click", () => {
+    const panel = $("#ayahDetail");
+    if (panel) panel.hidden = true;
+  });
+}
+
 function renderAyahs({ highlightAyah = null } = {}) {
   const wrap = $("#ayahList");
   if (!wrap) return;
 
-  const html = state.ayahs.map(ayahCard).join("");
-  wrap.innerHTML = html || `<div class="empty"><div class="empty__title">${state.lang === "ar" ? "لا توجد بيانات" : "No data"}</div></div>`;
+  if (!state.ayahs.length) {
+    wrap.innerHTML = `<div class="empty"><div class="empty__title">${state.lang === "ar" ? "لا توجد بيانات" : "No data"}</div></div>`;
+    return;
+  }
 
-  $$(".ayah", wrap).forEach((el) => {
+  wrap.innerHTML = renderMushafPage({ highlightAyah });
+
+  $$(".mushafAyah", wrap).forEach((el) => {
     const n = Number(el.dataset.ayah);
-    if (highlightAyah && n === Number(highlightAyah)) el.classList.add("is-highlight");
-
-    el.addEventListener("click", (evt) => {
-      // don't hijack button clicks
-      if (evt.target.closest("button")) return;
-      saveLastRead(state.currentSurah.number, n);
-      toast(state.lang === "ar" ? "تم حفظ موضع القراءة" : "Reading position saved");
-    });
-
-    el.addEventListener("click", (evt) => {
-      const b = evt.target.closest("button");
-      if (!b) return;
-      const action = b.dataset.action;
-      if (action === "save") toggleFavAyah(state.currentSurah.number, n);
-      if (action === "play") playAyah(state.currentSurah.number, n);
-    });
+    el.addEventListener("click", () => openAyahDetail(n));
   });
+
+  bindAyahDetailPanel();
 
   // Auto-highlight the ayah in view (soft "auto scrolling" feel)
   observeAyahs(wrap);
@@ -872,8 +1020,12 @@ function initPlayer() {
     if (audio.paused) audio.play();
     else audio.pause();
   });
-  $("#btnPrev")?.addEventListener("click", () => playIndex(state.audioIndex - 1));
-  $("#btnNext")?.addEventListener("click", () => playIndex(state.audioIndex + 1));
+  $("#btnPrev")?.addEventListener("click", () => {
+    if (!seekMp3QuranAyah(-1)) playIndex(state.audioIndex - 1);
+  });
+  $("#btnNext")?.addEventListener("click", () => {
+    if (!seekMp3QuranAyah(1)) playIndex(state.audioIndex + 1);
+  });
 
   vol?.addEventListener("input", () => (audio.volume = Number(vol.value)));
 
@@ -896,6 +1048,10 @@ function initPlayer() {
     seek.value = String((audio.currentTime / audio.duration) * 100);
     $("#tNow").textContent = fmtTime(audio.currentTime);
     $("#tDur").textContent = fmtTime(audio.duration);
+    // reuses this single existing listener (no second timeupdate handler) to also
+    // drive estimated ayah-sync for continuous MP3Quran surah audio; no-op for
+    // the real per-ayah-track queues (see syncEstimatedAyahForCurrentTime).
+    syncEstimatedAyahForCurrentTime();
   });
 
   audio.addEventListener("ended", () => {
@@ -991,21 +1147,110 @@ function playSurah(surahNumber) {
 }
 
 function updateListenNow(item) {
-  // Only if listen route exists
-  const wrap = $("#listenAyahs");
-  if (!wrap) return;
-
   // item may be ayah or surah queue
   const ayahNumber = item.ayahNumber;
   if (!ayahNumber) return;
 
-  $$(".ayah", wrap).forEach((el) => {
-    el.classList.toggle("is-highlight", Number(el.dataset.ayah) === Number(ayahNumber));
+  // Keep the currently-recited ayah highlighted and scrolled into view on
+  // whichever ayah list is present — the Reader page (#ayahList) and/or the
+  // Listen page (#listenAyahs) — so audio/ayah sync works from either route,
+  // not only from Listen.
+  ["#ayahList", "#listenAyahs"].forEach((sel) => {
+    const wrap = $(sel);
+    if (!wrap) return;
+    $$(".ayah", wrap).forEach((el) => {
+      el.classList.toggle("is-highlight", Number(el.dataset.ayah) === Number(ayahNumber));
+    });
+    // only auto-scroll within the route that's actually visible
+    const route = wrap.closest(".route");
+    if (route && route.hidden) return;
+    const el = wrap.querySelector(`#ayah-${ayahNumber}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
   });
+}
 
-  // auto scroll in listen panel
-  const el = wrap.querySelector(`#ayah-${ayahNumber}`);
-  el?.scrollIntoView({ behavior: "smooth", block: "center" });
+// --- MP3Quran continuous-surah ayah sync -----------------------------------
+// MP3Quran.net serves one audio file per full surah with no per-ayah timing
+// endpoint (confirmed: mp3quran-service.js exposes reciters/riwayat/moshaf only).
+// Per the fallback rule ("if timing data is unavailable, gracefully fall back —
+// never a fixed-interval fake timer"), we derive an estimated per-ayah timing
+// window from each ayah's actual Arabic text length as a share of the whole
+// surah, scaled against the audio's *real* duration once it's known. It is
+// still driven entirely by real playback position (audio.currentTime via the
+// existing timeupdate listener) — not a blind "every N seconds" timer — and it
+// only activates for this one audio kind, so the accurate per-ayah-file sync
+// used elsewhere (playAyah/playSurah) is untouched.
+function computeAyahTimingEstimate(ayahs, totalDuration) {
+  if (!ayahs?.length || !totalDuration || !isFinite(totalDuration)) return null;
+  const weights = ayahs.map((a) => Math.max(1, String(a.text || "").replace(/\s+/g, "").length));
+  const totalWeight = weights.reduce((s, w) => s + w, 0) || 1;
+  let acc = 0;
+  return ayahs.map((a, i) => {
+    const start = (acc / totalWeight) * totalDuration;
+    acc += weights[i];
+    const end = (acc / totalWeight) * totalDuration;
+    return { ayahNumber: a.numberInSurah, start, end };
+  });
+}
+
+function syncEstimatedAyahForCurrentTime() {
+  const item = state.audioQueue[state.audioIndex];
+  if (!item || item.kind !== "mp3quran-surah") return;
+
+  const audio = $("#audio");
+  if (!audio) return;
+
+  // Compute lazily once real duration + matching ayah text are both available.
+  if (!state.mp3quran.ayahTimingEstimate) {
+    if (!audio.duration || !isFinite(audio.duration)) return;
+    if (state.currentSurah?.number !== item.surahNumber || !state.ayahs?.length) return;
+    state.mp3quran.ayahTimingEstimate = computeAyahTimingEstimate(state.ayahs, audio.duration);
+    if (!state.mp3quran.ayahTimingEstimate) return;
+  }
+
+  const t = audio.currentTime;
+  const timing = state.mp3quran.ayahTimingEstimate;
+  const hit = timing.find((w) => t >= w.start && t < w.end) || timing[timing.length - 1];
+  if (!hit || state.mp3quran.lastEstimatedAyah === hit.ayahNumber) return;
+
+  state.mp3quran.lastEstimatedAyah = hit.ayahNumber;
+  try {
+    updateListenNow({ ayahNumber: hit.ayahNumber });
+  } catch {}
+}
+
+// Lets Prev/Next control estimated ayah position within a continuous MP3Quran
+// surah file by seeking real audio.currentTime. Returns false (untouched) for
+// the real per-ayah-track queues, so their existing behavior is unaffected.
+function seekMp3QuranAyah(direction) {
+  const item = state.audioQueue[state.audioIndex];
+  if (!item || item.kind !== "mp3quran-surah") return false;
+
+  const timing = state.mp3quran.ayahTimingEstimate;
+  if (!timing?.length) return false;
+
+  const audio = $("#audio");
+  if (!audio) return false;
+
+  const currentIdx = timing.findIndex((w) => w.ayahNumber === state.mp3quran.lastEstimatedAyah);
+  const nextIdx = Math.min(Math.max((currentIdx < 0 ? 0 : currentIdx) + direction, 0), timing.length - 1);
+  const target = timing[nextIdx];
+  if (!target) return false;
+
+  audio.currentTime = Math.max(0, target.start + 0.05);
+  syncEstimatedAyahForCurrentTime();
+  return true;
+}
+
+// When the user switches the MP3Quran reciter/moshaf while a surah is already
+// playing, reload the SAME surah with the newly selected reciter's audio and
+// reset the (now-invalid) timing estimate — instead of silently continuing to
+// play the previous reciter's audio.
+function reloadMp3QuranPlaybackIfActive() {
+  const audio = $("#audio");
+  const item = state.audioQueue[state.audioIndex];
+  if (!audio || !item || item.kind !== "mp3quran-surah" || audio.paused) return;
+  playMp3QuranSurah(item.surahNumber);
 }
 
 async function loadListenSurah(surahNumber) {
@@ -1078,6 +1323,7 @@ function initListenUI() {
 
   $("#btnListenPlay")?.addEventListener("click", () => {
     const n = Number(selSurah.value);
+    if (state.settings.mp3ReciterId && playMp3QuranSurah(n)) return;
     if (!state.ayahs?.length || state.currentSurah?.number !== n) {
       loadListenSurah(n).then(() => playSurah(n));
     } else {
@@ -1089,8 +1335,160 @@ function initListenUI() {
     $("#btnClosePlayer")?.click();
   });
 
+  syncMp3ListenControls();
   // initial load
   loadListenSurah(Number(selSurah.value));
+}
+
+
+function getMp3ReciterById(id) {
+  return state.mp3quran.reciters.find((r) => Number(r.id) === Number(id)) || null;
+}
+
+function setMp3Selection(reciterId, moshafId = null, { persist = true } = {}) {
+  const reciter = getMp3ReciterById(reciterId);
+  if (!reciter) return null;
+  const moshaf = findPreferredMoshaf(reciter, moshafId || state.settings.mp3MoshafId);
+  state.mp3quran.selectedReciter = reciter;
+  state.mp3quran.selectedMoshaf = moshaf;
+  state.settings.mp3ReciterId = reciter.id;
+  state.settings.mp3MoshafId = moshaf?.id || null;
+  if (persist) {
+    persistSettings();
+    rememberMp3Recent(reciter.id);
+  }
+  syncMp3ListenControls();
+  return { reciter, moshaf };
+}
+
+function rememberMp3Recent(reciterId) {
+  const recent = readJSON(LS.mp3Recent, []).filter((id) => Number(id) !== Number(reciterId));
+  recent.unshift(Number(reciterId));
+  writeJSON(LS.mp3Recent, recent.slice(0, 12));
+}
+
+function toggleMp3Favorite(reciterId) {
+  const favorites = readJSON(LS.mp3Favorites, []);
+  const exists = favorites.some((id) => Number(id) === Number(reciterId));
+  const next = exists ? favorites.filter((id) => Number(id) !== Number(reciterId)) : [Number(reciterId), ...favorites].slice(0, 80);
+  writeJSON(LS.mp3Favorites, next);
+  renderRecitersModule();
+}
+
+async function ensureMp3QuranData() {
+  if (state.mp3quran.loaded || state.mp3quran.loading) return;
+  state.mp3quran.loading = true;
+  renderRecitersModule();
+  try {
+    const data = await loadMp3QuranData();
+    state.mp3quran = { ...state.mp3quran, ...data, loaded: true, loading: false, error: "" };
+    const preferred = state.settings.mp3ReciterId || state.mp3quran.reciters[0]?.id;
+    if (preferred) setMp3Selection(preferred, state.settings.mp3MoshafId, { persist: false });
+    renderRecitersModule();
+    syncMp3ListenControls();
+  } catch (error) {
+    state.mp3quran.loading = false;
+    state.mp3quran.error = String(error?.message || error);
+    renderRecitersModule();
+  }
+}
+
+function syncMp3ListenControls() {
+  const reciterSelect = $("#listenMp3Reciter");
+  const moshafSelect = $("#listenMp3Moshaf");
+  const surahSelect = $("#listenSurah");
+  if (!reciterSelect || !moshafSelect) return;
+
+  reciterSelect.innerHTML = state.mp3quran.reciters
+    .map((r) => `<option value="${r.id}" ${Number(state.settings.mp3ReciterId) === Number(r.id) ? "selected" : ""}>${escapeHTML(r.arabicName)} — ${escapeHTML(r.englishName)}</option>`)
+    .join("");
+
+  const reciter = state.mp3quran.selectedReciter || getMp3ReciterById(state.settings.mp3ReciterId);
+  const moshaf = state.mp3quran.selectedMoshaf || findPreferredMoshaf(reciter, state.settings.mp3MoshafId);
+  moshafSelect.innerHTML = (reciter?.moshaf || [])
+    .map((m) => `<option value="${m.id}" ${Number(moshaf?.id) === Number(m.id) ? "selected" : ""}>${escapeHTML(m.name)} • ${m.surahTotal || m.surahList.length} سورة</option>`)
+    .join("");
+
+  if (surahSelect && moshaf?.surahList?.length) {
+    const current = Number(surahSelect.value || 1);
+    const allowed = new Set(moshaf.surahList);
+    Array.from(surahSelect.options).forEach((option) => {
+      const ok = allowed.has(Number(option.value));
+      option.disabled = !ok;
+    });
+    if (!allowed.has(current)) surahSelect.value = String(moshaf.surahList[0] || 1);
+  }
+}
+
+function playMp3QuranSurah(surahNumber) {
+  const selected = setMp3Selection(state.settings.mp3ReciterId, state.settings.mp3MoshafId, { persist: true });
+  const moshaf = selected?.moshaf || state.mp3quran.selectedMoshaf;
+  if (!moshaf) return false;
+  if (moshaf.surahList.length && !moshaf.surahList.includes(Number(surahNumber))) {
+    toast(state.lang === "ar" ? "هذه السورة غير متاحة في المصحف المختار" : "This surah is unavailable in the selected moshaf", "warn");
+    return true;
+  }
+  const url = buildMp3QuranSurahUrl(moshaf, surahNumber);
+  if (!url) return false;
+  const surah = state.surahs.find((s) => Number(s.number) === Number(surahNumber));
+  // reset synchronization safely for the (possibly new) reciter/surah before playback starts
+  state.mp3quran.ayahTimingEstimate = null;
+  state.mp3quran.lastEstimatedAyah = null;
+  state.audioQueue = [{ kind: "mp3quran-surah", surahNumber, title: `${surah?.name || "سورة"}`, sub: `${state.mp3quran.selectedReciter?.arabicName || "MP3Quran"} • ${moshaf.name}`, url }];
+  playIndex(0);
+  return true;
+}
+
+function renderRecitersModule() {
+  const root = $("#recitersModule");
+  if (!root) return;
+  if (state.mp3quran.loading) {
+    root.innerHTML = `<div class="skeletonList" aria-hidden="true"><div class="sk"></div><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>`;
+    return;
+  }
+  if (state.mp3quran.error && !state.mp3quran.reciters.length) {
+    root.innerHTML = `<div class="empty"><div class="empty__icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="empty__title">تعذّر تحميل قراء MP3Quran</div><div class="empty__desc">${escapeHTML(state.mp3quran.error)} — تستمر APIs الحالية بالعمل طبيعيًا.</div><button class="ghost" id="btnRetryMp3"><i class="fa-solid fa-rotate"></i><span>إعادة المحاولة</span></button></div>`;
+    $("#btnRetryMp3")?.addEventListener("click", () => { state.mp3quran.error = ""; state.mp3quran.loaded = false; ensureMp3QuranData(); });
+    return;
+  }
+
+  const query = $("#reciterSearch")?.value || "";
+  const riwayah = $("#reciterRiwayah")?.value || "all";
+  const moshaf = $("#reciterMoshaf")?.value || "all";
+  const favorites = new Set(readJSON(LS.mp3Favorites, []).map(Number));
+  const recent = new Set(readJSON(LS.mp3Recent, []).map(Number));
+  const filtered = filterReciters(state.mp3quran.reciters, { query, riwayah, moshaf }).slice(0, 80);
+  root.innerHTML = filtered.map((r) => {
+    const selected = Number(state.settings.mp3ReciterId) === Number(r.id);
+    const mainMoshaf = findPreferredMoshaf(r, selected ? state.settings.mp3MoshafId : null);
+    return `<article class="reciterCard ${selected ? "is-active" : ""}" data-reciter-card="${r.id}">
+      <div class="reciterCard__head"><div><strong>${escapeHTML(r.arabicName)}</strong><div class="muted" dir="ltr">${escapeHTML(r.englishName)}</div></div><button class="icon-btn" data-fav-reciter="${r.id}" aria-label="Favorite reciter"><i class="${favorites.has(r.id) ? "fa-solid" : "fa-regular"} fa-star"></i></button></div>
+      <div class="reciterCard__meta"><span class="chip">${r.moshaf.length} مصحف</span>${recent.has(r.id) ? `<span class="chip">مستخدم حديثًا</span>` : ""}</div>
+      <div class="muted">${escapeHTML(mainMoshaf?.name || "لا يوجد مصحف متاح")}</div>
+      <div class="panel__actions"><button class="ghost" data-select-reciter="${r.id}"><i class="fa-solid fa-check"></i><span>اختيار</span></button><button class="ghost" data-preview-reciter="${r.id}"><i class="fa-solid fa-play"></i><span>تجربة الفاتحة</span></button></div>
+    </article>`;
+  }).join("") || `<div class="empty"><div class="empty__title">لا توجد نتائج</div><div class="empty__desc">جرّب البحث باسم آخر أو إزالة الفلاتر.</div></div>`;
+
+  $$('[data-select-reciter]').forEach((b) => b.addEventListener("click", () => { setMp3Selection(Number(b.dataset.selectReciter)); toast(state.lang === "ar" ? "تم حفظ القارئ المفضل" : "Preferred reciter saved", "success"); renderRecitersModule(); }));
+  $$('[data-preview-reciter]').forEach((b) => b.addEventListener("click", () => { setMp3Selection(Number(b.dataset.previewReciter)); playMp3QuranSurah(1); renderRecitersModule(); }));
+  $$('[data-fav-reciter]').forEach((b) => b.addEventListener("click", () => toggleMp3Favorite(Number(b.dataset.favReciter))));
+}
+
+function initMp3QuranUI() {
+  ["reciterSearch", "reciterRiwayah", "reciterMoshaf"].forEach((id) => {
+    const el = $(`#${id}`);
+    el?.addEventListener(id === "reciterSearch" ? "input" : "change", renderRecitersModule);
+  });
+  $("#listenMp3Reciter")?.addEventListener("change", (e) => {
+    setMp3Selection(Number(e.target.value));
+    reloadMp3QuranPlaybackIfActive();
+  });
+  $("#listenMp3Moshaf")?.addEventListener("change", (e) => {
+    setMp3Selection(state.settings.mp3ReciterId, Number(e.target.value));
+    reloadMp3QuranPlaybackIfActive();
+  });
+  $("#btnReloadMp3")?.addEventListener("click", () => { state.mp3quran.loaded = false; state.mp3quran.error = ""; ensureMp3QuranData(); });
+  ensureMp3QuranData();
 }
 
 function saveDailyAsFav() {
@@ -1242,6 +1640,12 @@ function initTasbih() {
     { text: "الله أكبر", max: 33 },
     { text: "لا إله إلا الله", max: 33 },
   ];
+  const HUNDRED = [
+    { text: "سبحان الله", max: 100 },
+    { text: "الحمد لله", max: 100 },
+    { text: "الله أكبر", max: 100 },
+    { text: "لا إله إلا الله", max: 100 },
+  ];
   const FREE_DHIKR = [
     "سبحان الله",
     "الحمد لله",
@@ -1261,15 +1665,18 @@ function initTasbih() {
   const elLabel = $("#tasbihLabel");
   const elProg = $("#tasbihProgress");
   const btnLimited = $("#tasbihModeLimited");
+  const btnHundred = $("#tasbihModeHundred");
   const btnFree = $("#tasbihModeFree");
 
   const paintMode = () => {
     const s = readJSON(LS.tasbih, store);
     btnLimited?.classList.toggle("is-active", s.mode === "limited");
+    btnHundred?.classList.toggle("is-active", s.mode === "hundred");
     btnFree?.classList.toggle("is-active", s.mode === "free");
 
     // keep aria state
     btnLimited?.setAttribute("aria-pressed", String(s.mode === "limited"));
+    btnHundred?.setAttribute("aria-pressed", String(s.mode === "hundred"));
     btnFree?.setAttribute("aria-pressed", String(s.mode === "free"));
 
     if (s.mode === "limited") {
@@ -1277,6 +1684,11 @@ function initTasbih() {
       elLabel.textContent = cur.text;
       elCount.textContent = String(s.limited.count);
       elProg.textContent = `${s.limited.count} / ${cur.max}`;
+    } else if (s.mode === "hundred") {
+      const cur = HUNDRED[s.hundred.idx % HUNDRED.length];
+      elLabel.textContent = cur.text;
+      elCount.textContent = String(s.hundred.count);
+      elProg.textContent = `${s.hundred.count} / ${cur.max}`;
     } else {
       const d = s.free.dhikr;
       elLabel.textContent = d;
@@ -1284,19 +1696,19 @@ function initTasbih() {
       elProg.textContent = `${s.free.counts[d] || 0} / ∞`;
     }
 
-    // chips: rebuild for free mode (more dhikr) — keep design
+    // chips: rebuild per mode (more dhikr in free mode) — keep design
     const chipsWrap = $(".tasbih__chips");
     if (chipsWrap) {
-      const list = s.mode === "free" ? FREE_DHIKR : LIMITED.map((x) => x.text);
+      const list = s.mode === "free" ? FREE_DHIKR : s.mode === "hundred" ? HUNDRED.map((x) => x.text) : LIMITED.map((x) => x.text);
       chipsWrap.innerHTML = list
         .map((t) => `<button class="chip" data-dhikr="${escapeHTML(t)}">${escapeHTML(t)}</button>`)
         .join("");
       $$('[data-dhikr]', chipsWrap).forEach((b) => {
         b.addEventListener("click", () => {
           const ss = readJSON(LS.tasbih, store);
-          if (ss.mode === "limited") {
-            // in limited mode, dhikr changes automatically — ignore manual changes
-            toast(state.lang === "ar" ? "الوضع 33 ينتقل تلقائيًا" : "33 mode auto-advances");
+          if (ss.mode === "limited" || ss.mode === "hundred") {
+            // in the 33/100 modes, dhikr changes automatically — ignore manual changes
+            toast(state.lang === "ar" ? "الوضع ينتقل تلقائيًا" : "This mode auto-advances");
             return;
           }
           ss.free.dhikr = b.dataset.dhikr;
@@ -1341,6 +1753,30 @@ function initTasbih() {
       return;
     }
 
+    if (s.mode === "hundred") {
+      const cur = HUNDRED[s.hundred.idx % HUNDRED.length];
+      s.hundred.count += 1;
+
+      if (s.hundred.count >= cur.max) {
+        // congratulate every 100
+        toast("أحسنت 🤍 تقبل الله منك", "success");
+
+        // advance
+        s.hundred.idx = (s.hundred.idx + 1) % HUNDRED.length;
+        s.hundred.count = 0;
+
+        // full cycle completed
+        if (s.hundred.idx === 0) {
+          toast("ما شاء الله ✨ اكتملت الدورة", "success");
+        }
+      }
+
+      writeJSON(LS.tasbih, s);
+      paintMode();
+      punch();
+      return;
+    }
+
     // free mode
     const d = s.free.dhikr;
     s.free.counts[d] = (s.free.counts[d] || 0) + 1;
@@ -1355,6 +1791,8 @@ function initTasbih() {
     const s = readJSON(LS.tasbih, store);
     if (s.mode === "limited") {
       s.limited.count = 0;
+    } else if (s.mode === "hundred") {
+      s.hundred.count = 0;
     } else {
       const d = s.free.dhikr;
       s.free.counts[d] = 0;
@@ -1371,6 +1809,13 @@ function initTasbih() {
     paintMode();
   });
 
+  btnHundred?.addEventListener("click", () => {
+    const s = readJSON(LS.tasbih, store);
+    s.mode = "hundred";
+    writeJSON(LS.tasbih, s);
+    paintMode();
+  });
+
   btnFree?.addEventListener("click", () => {
     const s = readJSON(LS.tasbih, store);
     s.mode = "free";
@@ -1382,9 +1827,13 @@ function initTasbih() {
 }
 
 function normalizeTasbihStore(raw) {
-  // new schema:
-  // { mode: 'limited'|'free', limited:{idx,count}, free:{dhikr, counts:{[dhikr]:count}} }
-  if (raw && raw.mode && raw.limited && raw.free) return raw;
+  // schema:
+  // { mode: 'limited'|'hundred'|'free', limited:{idx,count}, hundred:{idx,count}, free:{dhikr, counts:{[dhikr]:count}} }
+  if (raw && raw.mode && raw.limited && raw.free) {
+    // migrate stores saved before the 100-count mode existed
+    if (!raw.hundred) raw.hundred = { idx: 0, count: 0 };
+    return raw;
+  }
 
   // old schema: {count, dhikr}
   if (raw && typeof raw === "object" && ("count" in raw || "dhikr" in raw)) {
@@ -1393,6 +1842,7 @@ function normalizeTasbihStore(raw) {
     return {
       mode: "free",
       limited: { idx: 0, count: 0 },
+      hundred: { idx: 0, count: 0 },
       free: { dhikr: dh, counts: { [dh]: c } },
     };
   }
@@ -1400,6 +1850,7 @@ function normalizeTasbihStore(raw) {
   return {
     mode: "limited",
     limited: { idx: 0, count: 0 },
+    hundred: { idx: 0, count: 0 },
     free: { dhikr: "سبحان الله", counts: { "سبحان الله": 0 } },
   };
 }
@@ -1579,6 +2030,7 @@ async function runSearch() {
 }
 
 export function initApp() {
+  initSecurityHardening();
   // Load prefs
   state.settings = { ...DEFAULT_SETTINGS, ...readJSON(LS.settings, {}) };
   const theme = localStorage.getItem(LS.theme) || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
@@ -1606,6 +2058,9 @@ export function initApp() {
   initPlayer();
   initTasbih();
   initBackgroundRotator();
+  initReminderSystem({ toast });
+  bindReminderSettings();
+  initMp3QuranUI();
 
   // router
   setRoute(routeFromHash());

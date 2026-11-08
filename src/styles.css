@@ -137,7 +137,8 @@ body::before{
 
 /* Topbar */
 .topbar{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:1fr minmax(280px,620px) 1fr;gap:14px;
-  padding:14px 18px;backdrop-filter:blur(10px)}
+  padding:14px 18px;backdrop-filter:blur(10px);transition:transform .32s cubic-bezier(.22,.9,.28,1)}
+.topbar--hidden{transform:translateY(-110%)}
 .topbar__left,.topbar__center,.topbar__right{display:flex;align-items:center;gap:12px}
 .topbar__right{justify-content:flex-end}
 .brand{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:18px}
@@ -181,9 +182,12 @@ body::before{
 /* Sidebar */
 .sidebar{position:fixed;inset:0;z-index:50;pointer-events:none;opacity:0;transition:opacity .22s ease;background:rgba(0,0,0,.18);backdrop-filter:blur(10px)}
 .sidebar.is-open{pointer-events:auto;opacity:1}
-.sidebar__inner{width:min(380px,92vw);height:calc(100% - 28px);margin:14px;padding:16px;transform:translateX(14px) scale(.985);opacity:0;transition:transform .26s ease, opacity .26s ease}
+.sidebar__inner{width:min(380px,92vw);height:calc(100% - 28px);margin:14px;padding:16px;transform:translateX(14px) scale(.985);opacity:0;transition:transform .26s ease, opacity .26s ease;
+  display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .sidebar.is-open .sidebar__inner{transform:translateX(0) scale(1);opacity:1}
 .sidebar__title{font-weight:900;margin:4px 0 12px}
+/* Independent scrolling: while the nav menu is open, the underlying app stays fixed and only .sidebar__inner scrolls */
+html.nav-open,html.nav-open body{overflow:hidden;height:100%;overscroll-behavior:none}
 .nav{display:flex;flex-direction:column;gap:8px}
 .nav__item{text-decoration:none;color:var(--text);display:flex;align-items:center;gap:12px;padding:12px;border-radius:16px;
   border:1px solid transparent;background:rgba(255,255,255,.04);transition:transform .18s ease,border-color .18s ease,background .18s ease}
@@ -307,6 +311,54 @@ body::before{
 .ayah__text{font-family:var(--ayah-font);font-size:var(--ayah-size);line-height:var(--ayah-line)}
 .ayah__tr{margin-top:10px;color:var(--muted);line-height:1.8;font-size:14px;direction:ltr;text-align:left;font-family:var(--font-ui-en)}
 
+/* ---------- Mushaf-style Reading page (section 9/10 of the spec) ---------- */
+/* Transparent by design: no opaque page background here, so the app's existing
+   photo/particle background stays visible behind the decorative frame. */
+.mushafPage{padding:6px 6px 18px}
+.mushafTopInfo{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:6px 10px 12px;font-weight:800;color:var(--muted);font-size:13px}
+.mushafFrame{position:relative;border:1px solid var(--stroke);border-radius:20px;
+  padding:22px clamp(14px,4vw,34px) 30px;background:transparent}
+.mushafFrame::before{content:"";position:absolute;inset:6px;border:1px solid rgba(216,179,90,.35);
+  border-radius:14px;pointer-events:none}
+
+.mushafHeader{position:relative;display:flex;align-items:center;justify-content:center;gap:14px;
+  margin:6px auto 20px;padding:10px 18px;max-width:560px;
+  border-top:3px double var(--gold);border-bottom:3px double var(--gold)}
+.mushafHeader__ornament{width:34px;height:34px;border-radius:50%;flex:0 0 auto;
+  border:1.5px solid var(--gold);
+  background:radial-gradient(circle at 50% 50%, rgba(216,179,90,.30), rgba(216,179,90,.04) 70%)}
+.mushafHeader__title{font-family:var(--font-quran);font-weight:700;font-size:clamp(20px,3.6vw,30px);
+  color:var(--gold);letter-spacing:.5px;white-space:nowrap}
+
+.mushafBasmala{text-align:center;font-family:var(--font-quran);font-size:clamp(20px,3vw,26px);
+  color:var(--text);margin:0 auto 18px;opacity:.92}
+
+.mushafFlow{font-family:var(--ayah-font);font-size:var(--ayah-size);line-height:var(--ayah-line);
+  text-align:justify;text-align-last:center;color:var(--text)}
+.mushafFlow .mushafAyah{cursor:pointer;border-radius:6px;transition:background-color .18s ease,color .18s ease;
+  padding:.05em 0}
+.mushafFlow .mushafAyah:hover{background:rgba(216,179,90,.10)}
+.mushafFlow .mushafAyah.is-highlight{background:rgba(216,179,90,.22);box-shadow:0 0 0 1px rgba(216,179,90,.25) inset}
+.ayahEnd{display:inline-flex;align-items:center;justify-content:center;width:1.5em;height:1.5em;
+  margin:0 .18em;border-radius:50%;border:1.5px solid var(--gold);font-size:.5em;font-weight:900;
+  color:var(--gold);vertical-align:.2em;
+  background:radial-gradient(circle at 50% 40%, rgba(216,179,90,.28), rgba(216,179,90,.05))}
+
+.ayahDetail{margin:14px 6px 0;padding:14px 16px;border-radius:18px;border:1px solid var(--stroke);
+  background:rgba(255,255,255,.06)}
+.ayahDetail__head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ayahDetail__num{font-weight:900;color:var(--gold)}
+.ayahDetail__actions{display:flex;gap:8px}
+.ayahDetail__tr{margin-top:10px;color:var(--muted);line-height:1.8;font-size:14px;direction:ltr;
+  text-align:left;font-family:var(--font-ui-en)}
+
+@media (max-width:720px){
+  .mushafFrame{padding:16px 14px 22px}
+  .mushafHeader{gap:10px;padding:8px 12px}
+  .mushafHeader__ornament{width:26px;height:26px}
+}
+
 .empty{padding:26px;text-align:center}
 .empty__icon{font-size:24px;color:var(--turq)}
 .empty__title{font-weight:1000;margin-top:10px}
@@ -397,6 +449,16 @@ mark.hit{background:rgba(44,246,215,.18);border:1px solid rgba(44,246,215,.22);c
   opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .18s ease, transform .18s ease}
 .fab.is-on{opacity:1;pointer-events:auto;transform:translateY(0)}
 
+/* Smart navbar peek control: appears only while the topbar is hidden (scrolled down),
+   sits at the top-center edge, and never blocks other controls or scrolling. */
+.navPeek{position:fixed;top:0;left:50%;transform:translate(-50%,-120%);z-index:21;
+  width:40px;height:26px;border-radius:0 0 14px 14px;border:1px solid var(--stroke);border-top:0;
+  background:rgba(255,255,255,.10);backdrop-filter:blur(10px);color:var(--text);
+  display:grid;place-items:center;cursor:pointer;opacity:0;pointer-events:none;
+  transition:opacity .2s ease, transform .2s ease;box-shadow:var(--shadow2)}
+.navPeek.is-on{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.navPeek i{font-size:12px}
+
 /* Loading */
 .loading{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:linear-gradient(180deg,var(--bg1),var(--bg0))}
 .loading__orb{width:120px;height:120px;border-radius:999px;
@@ -468,3 +530,8 @@ mark.hit{background:rgba(44,246,215,.18);border:1px solid rgba(44,246,215,.22);c
 @keyframes eq{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1.2)}}
 @keyframes bar{0%{transform:translateX(-20%)}100%{transform:translateX(240%)}}
 @keyframes sk{0%,100%{filter:brightness(1)}50%{filter:brightness(1.25)}}
+
+/* Quran Glass extension panels — emerald/gold glass companion UI, additive only. */
+.mp3ListenControls{margin-top:12px;align-items:end}.mp3ListenControls .ghost{align-self:end;justify-content:center}.reciterFilters{margin-bottom:14px}.recitersGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.reciterCard{border:1px solid var(--stroke);border-radius:var(--radius2);padding:14px;background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.045));box-shadow:var(--shadow2);transition:transform .18s ease,border-color .18s ease,background .18s ease}.reciterCard:hover{transform:translateY(-3px);border-color:rgba(44,246,215,.28)}.reciterCard.is-active{border-color:rgba(216,179,90,.48);background:linear-gradient(180deg,rgba(216,179,90,.16),rgba(44,246,215,.06))}.reciterCard__head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.reciterCard__meta{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.reminderPanel{margin-top:0}.reminderGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.reminderCard{border:1px solid var(--stroke);border-radius:var(--radius2);padding:12px;background:rgba(255,255,255,.055)}.reminderCard__date{font-size:12px;color:var(--gold);font-weight:900;margin-bottom:6px}.hadithBox{margin-top:10px;display:grid;gap:8px}.hadithBox__ar{font-family:var(--font-quran);font-size:20px;line-height:1.9}.hadithBox__en{direction:ltr;text-align:left;color:var(--muted);line-height:1.6}.hadithBox__ref{font-size:12px;color:var(--turq);font-weight:800}.gridSpan2{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:14px}input[type="number"]{width:min(160px,100%);border:1px solid var(--stroke);border-radius:14px;background:rgba(255,255,255,.08);color:var(--text);padding:10px 12px;outline:none}input[type="number"]:focus{border-color:rgba(44,246,215,.42);box-shadow:0 0 0 3px rgba(44,246,215,.10)}
+@media (max-width:1100px){.recitersGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.gridSpan2,.reminderGrid{grid-template-columns:1fr}}
+@media (max-width:720px){.recitersGrid{grid-template-columns:1fr}.mp3ListenControls{align-items:stretch}.mp3ListenControls .ghost{align-self:stretch}.hadithBox__ar{font-size:18px}.bottomnav{overflow-x:auto}.bottomnav__item{min-width:72px}.gridSpan2{display:block}.gridSpan2>.panel{margin-bottom:12px}}
