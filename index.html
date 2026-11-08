@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="A premium modern Quran platform — Arabic-first, fast, and beautifully animated." />
     <meta name="theme-color" content="#06110d" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com https://cdnjs.cloudflare.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:; img-src 'self' data: blob:; media-src 'self' https://*.mp3quran.net https://cdn.islamic.network https://*.islamic.network https://api.alquran.cloud; connect-src 'self' https://api.alquran.cloud https://mp3quran.net https://*.mp3quran.net; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
     <link rel="icon" type="image/png" href="logo.png.webp">
     <title>Quran Glass • منصة القرآن</title>
 
@@ -76,6 +77,7 @@
             <a class="nav__item" href="#/progress" data-route="progress"><i class="fa-solid fa-chart-line"></i><span>التقدّم</span></a>
             <a class="nav__item" href="#/tasbih" data-route="tasbih"><i class="fa-solid fa-circle-plus"></i><span>تسبيح</span></a>
             <a class="nav__item" href="#/listen" data-route="listen"><i class="fa-solid fa-headphones"></i><span>استماع</span></a>
+            <a class="nav__item" href="#/reciters" data-route="reciters"><i class="fa-solid fa-microphone-lines"></i><span>القراء</span></a>
             <a class="nav__item" href="#/daily" data-route="daily"><i class="fa-solid fa-sparkles"></i><span>يوميّات</span></a>
             <a class="nav__item" href="#/settings" data-route="settings"><i class="fa-solid fa-gear"></i><span>الإعدادات</span></a>
           </nav>
@@ -92,6 +94,7 @@
         <a href="#/search" data-route="search" class="bottomnav__item"><i class="fa-solid fa-magnifying-glass"></i><span>بحث</span></a>
         <a href="#/tasbih" data-route="tasbih" class="bottomnav__item"><i class="fa-solid fa-circle-plus"></i><span>تسبيح</span></a>
         <a href="#/listen" data-route="listen" class="bottomnav__item"><i class="fa-solid fa-headphones"></i><span>استماع</span></a>
+        <a href="#/reciters" data-route="reciters" class="bottomnav__item"><i class="fa-solid fa-microphone-lines"></i><span>قراء</span></a>
         <a href="#/settings" data-route="settings" class="bottomnav__item"><i class="fa-solid fa-gear"></i><span>إعدادات</span></a>
       </nav>
 
@@ -153,7 +156,7 @@
           <div class="pageHead">
             <div>
               <h2 class="pageHead__title">القراءة</h2>
-              <p class="pageHead__desc">اختر سورة ثم استمتع بقراءة بطاقات آيات أنيقة مع تمييز وحفظ.</p>
+              <p class="pageHead__desc">اختر سورة ثم استمتع بتجربة قراءة على طراز المصحف، مع تمييز الآية الحالية وحفظ موضع القراءة.</p>
             </div>
             <div class="pageHead__actions">
               <button class="ghost" id="btnScrollTop"><i class="fa-solid fa-arrow-up"></i><span>أعلى</span></button>
@@ -302,6 +305,7 @@
               <div class="tasbih__ring" aria-hidden="true"></div>
               <div class="tasbih__modes">
                 <button class="chip" id="tasbihModeLimited" type="button">وضع 33</button>
+                <button class="chip" id="tasbihModeHundred" type="button">وضع 100</button>
                 <button class="chip" id="tasbihModeFree" type="button">وضع Free</button>
                 <div class="tasbih__progress" id="tasbihProgress">0 / ∞</div>
               </div>
@@ -337,8 +341,12 @@
                   <label>السورة</label>
                   <select id="listenSurah"></select>
                 </div>
-                <div class="field">
-                  <label>القارئ</label>
+                <!-- Kept in the DOM (not deleted) so the existing per-ayah audio-edition
+                     integration keeps working with its saved default, but hidden from the
+                     visible UI since the القارئ/الشيخ picker below already covers reciter
+                     selection for listening — avoids showing two confusing "reciter" pickers. -->
+                <div class="field" hidden>
+                  <label>القارئ (مزامنة الآيات)</label>
                   <select id="listenReciter">
                     <option value="ar.alafasy" selected>المعيقلي (alafasy)</option>
                     <option value="ar.abdulbasitmurattal">عبدالباسط (murattal)</option>
@@ -346,6 +354,17 @@
                     <option value="ar.shaatree">الشاطري</option>
                   </select>
                 </div>
+              </div>
+              <div class="searchPanel__row mp3ListenControls" aria-label="Reciter controls">
+                <div class="field">
+                  <label>القارئ</label>
+                  <select id="listenMp3Reciter" aria-label="القارئ"></select>
+                </div>
+                <div class="field">
+                  <label>المصحف / الرواية</label>
+                  <select id="listenMp3Moshaf" aria-label="Selected moshaf"></select>
+                </div>
+                <button class="ghost" id="btnReloadMp3" type="button"><i class="fa-solid fa-rotate"></i><span>تحديث القراء</span></button>
               </div>
               <div class="panel__actions" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
                 <button class="cta" id="btnListenPlay"><i class="fa-solid fa-play"></i><span>تشغيل السورة</span><span class="cta__shine" aria-hidden="true"></span></button>
@@ -359,6 +378,42 @@
               <div id="listenAyahs" class="ayahList" style="padding:0; max-height: calc(100vh - 270px); overflow:auto"></div>
             </section>
           </div>
+        </section>
+
+
+        <section class="route" id="route-reciters" data-route="reciters" hidden>
+          <div class="pageHead">
+            <div>
+              <h2 class="pageHead__title">القراء و MP3Quran</h2>
+              <p class="pageHead__desc">خدمة مستقلة للقراء والروايات والمصاحف من MP3Quran تعمل بجانب APIs الحالية دون تعارض.</p>
+            </div>
+          </div>
+
+          <section class="glass panel reciterFilters" aria-label="Reciter filters">
+            <div class="searchPanel__row">
+              <div class="field">
+                <label>البحث باسم القارئ</label>
+                <input id="reciterSearch" type="search" placeholder="ابحث بالعربية أو الإنجليزية" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label>فلترة بالرواية</label>
+                <select id="reciterRiwayah">
+                  <option value="all" selected>كل الروايات</option>
+                  <option value="حفص">حفص</option>
+                  <option value="ورش">ورش</option>
+                  <option value="قالون">قالون</option>
+                  <option value="الدوري">الدوري</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>فلترة بالمصحف</label>
+                <select id="reciterMoshaf">
+                  <option value="all" selected>كل المصاحف</option>
+                </select>
+              </div>
+            </div>
+          </section>
+          <div id="recitersModule" class="recitersGrid" aria-live="polite"></div>
         </section>
 
         <section class="route" id="route-daily" data-route="daily" hidden>
@@ -441,6 +496,27 @@
               </div>
             </section>
 
+            <section class="glass panel">
+              <h3 class="panel__title">إعدادات التذكيرات الإسلامية</h3>
+              <div class="settings">
+                <div class="setRow"><div><div class="setRow__title">تفعيل الإشعارات</div><div class="muted">يطلب إذن المتصفح ويحفظ السجل محليًا.</div></div><button class="pill" id="btnNotificationPermission" type="button"><i class="fa-solid fa-bell"></i><span>طلب الإذن</span></button></div>
+                <div class="setRow"><div><div class="setRow__title">تفعيل إشعارات التذكيرات</div><div class="muted">تشغيل أو إيقاف إشعارات المتصفح.</div></div><label class="toggle"><input id="toggleNotifications" type="checkbox" /><span class="toggle__ui" aria-hidden="true"></span></label></div>
+                <div class="setRow"><div><div class="setRow__title">تفعيل الصوت</div><div class="muted">صوت لطيف للتذكيرات والسلوات.</div></div><label class="toggle"><input id="toggleReminderSound" type="checkbox" /><span class="toggle__ui" aria-hidden="true"></span></label></div>
+                <div class="setRow"><div><div class="setRow__title">تكرار فحص التذكيرات</div><div class="muted">بالدقائق لفحص التذكيرات أثناء فتح التطبيق.</div></div><input id="reminderFrequency" type="number" min="10" max="240" step="5" value="30" /></div>
+                <div class="setRow"><div><div class="setRow__title">مستوى الصوت</div><div class="muted">مستوى الصوت من 0 إلى 1.</div></div><input id="reminderVolume" type="range" min="0" max="1" value="0.35" step="0.05" /></div>
+                <div class="setRow"><div><div class="setRow__title">تذكيرات الصلاة</div><div class="muted">مخصص لتذكيرات الصلاة المستقبلية دون التأثير على النظام الحالي.</div></div><label class="toggle"><input id="togglePrayerReminder" type="checkbox" /><span class="toggle__ui" aria-hidden="true"></span></label></div>
+                <div class="setRow"><div><div class="setRow__title">تذكيرات الصيام</div><div class="muted">الاثنين، الخميس، الأيام البيض، عاشوراء، ورجب التطوعي.</div></div><label class="toggle"><input id="toggleFastingReminder" type="checkbox" /><span class="toggle__ui" aria-hidden="true"></span></label></div>
+                <div class="setRow"><div><div class="setRow__title">تذكيرات الأشهر الحرم</div><div class="muted">المحرّم، رجب، ذو القعدة، ذو الحجة.</div></div><label class="toggle"><input id="toggleSacredMonths" type="checkbox" /><span class="toggle__ui" aria-hidden="true"></span></label></div>
+                <div class="setRow"><div><div class="setRow__title">تذكيرات الصلاة على النبي ﷺ</div><div class="muted">تذكير كل فترة بالصلاة على النبي ﷺ.</div></div><label class="toggle"><input id="toggleSalawatReminder" type="checkbox" /><span class="toggle__ui" aria-hidden="true"></span></label></div>
+                <div class="setRow"><div><div class="setRow__title">فاصل الصلاة على النبي ﷺ</div><div class="muted">الافتراضي 30 دقيقة.</div></div><input id="salawatInterval" type="number" min="5" max="240" step="5" value="30" /></div>
+                <div class="setRow"><div><div class="setRow__title">نمط تذكير الصلاة على النبي ﷺ</div><div class="muted">يمكن الاكتفاء بالإشعار فقط أو الصوت فقط.</div></div><select id="salawatMode"><option value="both">صوت وإشعار</option><option value="notification">إشعار فقط</option><option value="voice">صوت فقط</option></select></div>
+                <div class="setRow"><div><div class="setRow__title">لغة التذكيرات</div><div class="muted">لغة نصوص التذكيرات.</div></div><select id="reminderLanguage"><option value="ar">العربية</option><option value="en">الإنجليزية</option></select></div>
+                <div class="setRow"><div><div class="setRow__title">مظهر التذكيرات</div><div class="muted">يحفظ تفضيل مظهر التذكيرات.</div></div><select id="reminderTheme"><option value="system">تلقائي (حسب النظام)</option><option value="light">فاتح</option><option value="dark">داكن</option></select></div>
+                <div class="setRow"><div><div class="setRow__title">إعادة ضبط الإعدادات</div><div class="muted">يعيد إعدادات التذكير فقط ولا يلمس إعدادات القراءة.</div></div><button class="ghost" id="btnResetReminderSettings" type="button"><i class="fa-solid fa-rotate-left"></i><span>إعادة</span></button></div>
+              </div>
+            </section>
+
+            <div id="reminderDashboard" class="gridSpan2" aria-live="polite"></div>
 
           </div>
         </section>
@@ -470,6 +546,7 @@
       </section>
 
       <button class="fab" id="fabTop" aria-label="Scroll to top"><i class="fa-solid fa-arrow-up"></i></button>
+      <button class="navPeek" id="navPeek" type="button" aria-label="Show navigation bar"><i class="fa-solid fa-chevron-down"></i></button>
 
       <div class="modal" id="modal" aria-hidden="true">
         <div class="modal__backdrop" data-close="true"></div>
